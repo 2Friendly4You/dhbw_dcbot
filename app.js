@@ -8,7 +8,7 @@ import {
 } from 'discord-interactions';
 import {
   addCourseAlias,
-  addException,
+  addExceptions,
   archiveAllOldCategories,
   archiveCategory,
   createMissingCourseCategories,
@@ -91,6 +91,30 @@ function responseEmbed(title, description, color = COLORS.info, fields = []) {
   };
 }
 
+function exceptionSelectResponse() {
+  return {
+    ...responseEmbed(
+      'Archivierungsausnahmen hinzufügen',
+      'Wähle bis zu 25 Kategorien aus, die nie automatisch archiviert werden sollen.',
+    ),
+    components: [
+      {
+        type: 1,
+        components: [
+          {
+            type: 8,
+            custom_id: 'archiveexception:add',
+            channel_types: [4],
+            min_values: 1,
+            max_values: 25,
+            placeholder: 'Kategorien auswählen',
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function isAdministrator(member) {
   return (
     member?.permissions !== undefined &&
@@ -155,16 +179,7 @@ async function executeCommand(data) {
     case 'archiveexception': {
       const subcommand = data.options?.[0];
       if (subcommand?.name === 'add') {
-        const result = await addException(selectedCategoryId(subcommand.options));
-        return responseEmbed(
-          result.added ? 'Ausnahme hinzugefügt' : 'Ausnahme vorhanden',
-          `**${result.category.name}** ${
-            result.added
-              ? 'wird nie automatisch archiviert.'
-              : 'ist bereits eine Ausnahme.'
-          }`,
-          result.added ? COLORS.success : COLORS.info,
-        );
+        return exceptionSelectResponse();
       }
       if (subcommand?.name === 'remove') {
         const categoryId = selectedCategoryId(subcommand.options);
@@ -293,6 +308,58 @@ app.post(
           data: { choices: [] },
         });
       }
+    }
+    if (
+      type === InteractionType.MESSAGE_COMPONENT &&
+      data.custom_id === 'archiveexception:add'
+    ) {
+      if (!isAdministrator(member)) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            ...responseEmbed(
+              'Keine Berechtigung',
+              'Nur Administratoren dürfen diesen Bot verwenden.',
+              COLORS.error,
+            ),
+            flags: InteractionResponseFlags.EPHEMERAL,
+          },
+        });
+      }
+
+      res.send({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+      try {
+        const result = await addExceptions(data.values || []);
+        const lines = [
+          ...result.added.map((name) => `- **${name}** hinzugefügt`),
+          ...result.existing.map((name) => `- **${name}** war bereits gespeichert`),
+        ];
+        await DiscordRequest(`webhooks/${applicationId}/${token}/messages/@original`, {
+          method: 'PATCH',
+          body: {
+            ...responseEmbed(
+              'Archivierungsausnahmen gespeichert',
+              lines.join('\n'),
+              COLORS.success,
+            ),
+            components: [],
+          },
+        });
+      } catch (error) {
+        console.error('Adding archive exceptions failed', error);
+        await DiscordRequest(`webhooks/${applicationId}/${token}/messages/@original`, {
+          method: 'PATCH',
+          body: {
+            ...responseEmbed(
+              'Ausnahmen konnten nicht gespeichert werden',
+              'Details stehen im Bot-Log.',
+              COLORS.error,
+            ),
+            components: [],
+          },
+        });
+      }
+      return;
     }
     if (type !== InteractionType.APPLICATION_COMMAND) {
       return res.status(400).json({ error: 'unknown interaction type' });

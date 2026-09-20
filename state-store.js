@@ -49,15 +49,28 @@ function mutateState(mutator) {
   return mutation;
 }
 
-export function addArchiveException(category) {
+export function addArchiveExceptions(categories) {
   return mutateState((state) => {
-    const existing = state.exceptions.find((item) => item.id === category.id);
-    if (existing) {
-      existing.name = category.name;
-      return false;
+    const existingById = new Map(
+      state.exceptions.map((exception) => [exception.id, exception]),
+    );
+    const added = [];
+    const existing = [];
+
+    for (const category of categories) {
+      const saved = existingById.get(category.id);
+      if (saved) {
+        saved.name = category.name;
+        existing.push(category.name);
+        continue;
+      }
+      const exception = { id: category.id, name: category.name };
+      state.exceptions.push(exception);
+      existingById.set(category.id, exception);
+      added.push(category.name);
     }
-    state.exceptions.push({ id: category.id, name: category.name });
-    return true;
+
+    return { added, existing };
   });
 }
 

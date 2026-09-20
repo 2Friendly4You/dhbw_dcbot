@@ -13,7 +13,7 @@ Befehle sind auf Administratoren beschränkt.
 | `/archivepreview` | Zeigt geplante Archivierungen |
 | `/archive kategorie` | Archiviert eine ausgewählte Kategorie |
 | `/archiveall` | Archiviert alle nicht mehr aktiven Fachkategorien |
-| `/archiveexception add kategorie` | Schützt eine Kategorie vor `/archiveall` |
+| `/archiveexception add` | Öffnet eine Mehrfachauswahl für geschützte Kategorien |
 | `/archiveexception remove kategorie` | Entfernt den Schutz |
 | `/archiveexception list` | Zeigt alle Ausnahmen |
 | `/coursealias add fach kategorie` | Ordnet ein Rapla-Fach einer anders benannten Kategorie zu |
@@ -21,6 +21,8 @@ Befehle sind auf Administratoren beschränkt.
 | `/coursealias list` | Zeigt alle Fachzuordnungen |
 
 Discord ergänzt Fachnamen per Autocomplete und Kategorien über den nativen Kategorie-Picker.
+Beim Hinzufügen von Archivierungsausnahmen können bis zu 25 Kategorien gleichzeitig ausgewählt
+werden.
 
 ## Verhalten
 

@@ -41,8 +41,7 @@ const COMMANDS = [
       {
         type: 1,
         name: 'add',
-        description: 'Fügt eine Ausnahme hinzu',
-        options: [CATEGORY_OPTION],
+        description: 'Fügt eine oder mehrere Ausnahmen hinzu',
       },
       {
         type: 1,

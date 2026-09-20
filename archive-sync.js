@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DiscordRequest } from './utils.js';
 import {
-  addArchiveException,
+  addArchiveExceptions,
   deleteCourseAlias,
   readState,
   recordArchivedCategories,
@@ -289,18 +289,19 @@ export async function archiveAllOldCategories() {
   return { categories: categories.map((category) => category.name) };
 }
 
-export async function addException(categoryId) {
+export async function addExceptions(categoryIds) {
   requireConfiguration();
   const channels = await fetchGuildChannels();
-  const category = channels.find(
-    (channel) => channel.id === categoryId && channel.type === CATEGORY_TYPE,
+  const requestedIds = new Set(categoryIds);
+  const categories = channels.filter(
+    (channel) =>
+      channel.type === CATEGORY_TYPE && requestedIds.has(channel.id),
   );
-  if (!category) {
-    throw new Error('The selected category does not exist');
+  if (categories.length !== requestedIds.size) {
+    throw new Error('At least one selected category does not exist');
   }
 
-  const added = await addArchiveException({ id: category.id, name: category.name });
-  return { added, category };
+  return addArchiveExceptions(categories);
 }
 
 export async function removeException(categoryId) {
