@@ -12,8 +12,6 @@ import {
 const CATEGORY_TYPE = 4;
 const TEXT_CHANNEL_TYPE = 0;
 const ARCHIVED_PREFIX = process.env.ARCHIVED_PREFIX || 'archived-';
-const DEFAULT_LECTURES_URL =
-  '<LECTURES_API_URL>';
 const VIEW_CHANNEL = 1024n;
 const SEND_MESSAGES = 2048n;
 const READ_MESSAGE_HISTORY = 65536n;
@@ -45,12 +43,16 @@ export function normalizeName(value) {
 }
 
 async function fetchLectures() {
+  if (!process.env.LECTURES_API_URL) {
+    throw new Error('LECTURES_API_URL is required');
+  }
+
   const headers = {};
   if (process.env.LECTURES_API_TOKEN) {
     headers.Authorization = `Bearer ${process.env.LECTURES_API_TOKEN}`;
   }
 
-  const response = await fetch(process.env.LECTURES_API_URL || DEFAULT_LECTURES_URL, {
+  const response = await fetch(process.env.LECTURES_API_URL, {
     headers,
   });
   if (!response.ok) {
