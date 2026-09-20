@@ -20,7 +20,7 @@ import {
   removeException,
   removeCourseAlias,
 } from './archive-sync.js';
-import { DiscordRequest } from './utils.js';
+import { DiscordApiError, DiscordRequest } from './utils.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +89,76 @@ function responseEmbed(title, description, color = COLORS.info, fields = []) {
       },
     ],
   };
+}
+
+function findDiscordApiError(error) {
+  let current = error;
+  while (current) {
+    if (current instanceof DiscordApiError) {
+      return current;
+    }
+    current = current.cause;
+  }
+  return undefined;
+}
+
+function logCommandError(commandName, error) {
+  const discordError = findDiscordApiError(error);
+  console.error(JSON.stringify({
+    event: 'command_failed',
+    command: commandName,
+    message: error.message,
+    discord: discordError
+      ? {
+        method: discordError.method,
+        endpoint: discordError.endpoint,
+        httpStatus: discordError.status,
+        code: discordError.code,
+        message: discordError.message,
+      }
+      : undefined,
+  }));
+}
+
+function formatArchiveWarnings(warnings) {
+  if (warnings.length === 0) {
+    return [];
+  }
+
+  for (const warning of warnings) {
+    const discordError = findDiscordApiError(warning.error);
+    console.warn(JSON.stringify({
+      event: 'archive_warning',
+      action: warning.action,
+      category: warning.categoryName,
+      channel: warning.channelName,
+      channelId: warning.channelId,
+      discord: discordError
+        ? {
+          method: discordError.method,
+          endpoint: discordError.endpoint,
+          httpStatus: discordError.status,
+          code: discordError.code,
+          message: discordError.message,
+        }
+        : { message: warning.error.message },
+    }));
+  }
+
+  return [
+    {
+      name: `Nicht vollständig schreibgeschützt (${warnings.length})`,
+      value: warnings
+        .map((warning) => {
+          const discordError = findDiscordApiError(warning.error);
+          const reason = discordError?.code === 50013
+            ? 'Discord-Berechtigung fehlt'
+            : discordError?.message || warning.error.message;
+          return `- **${warning.categoryName} / ${warning.channelName}**: ${reason}`;
+        })
+        .join('\n'),
+    },
+  ];
 }
 
 function exceptionSelectResponse() {
@@ -161,7 +231,12 @@ async function executeCommand(data) {
       return responseEmbed(
         result.archived ? 'Kategorie archiviert' : 'Bereits archiviert',
         `**${result.name}** ${result.archived ? 'wurde archiviert.' : 'war bereits archiviert.'}`,
-        result.archived ? COLORS.success : COLORS.info,
+        result.warnings?.length > 0
+          ? COLORS.warning
+          : result.archived
+            ? COLORS.success
+            : COLORS.info,
+        formatArchiveWarnings(result.warnings || []),
       );
     }
     case 'archiveall': {
@@ -171,7 +246,12 @@ async function executeCommand(data) {
         result.categories.length > 0
           ? result.categories.map((name) => `- **${name}**`).join('\n')
           : 'Keine alten Fachkategorien gefunden.',
-        result.categories.length > 0 ? COLORS.success : COLORS.info,
+        result.warnings.length > 0
+          ? COLORS.warning
+          : result.categories.length > 0
+            ? COLORS.success
+            : COLORS.info,
+        formatArchiveWarnings(result.warnings),
       );
     }
     case 'archivepreview':
@@ -392,7 +472,7 @@ app.post(
         body: response,
       });
     } catch (error) {
-      console.error(`Command ${data.name} failed`, error);
+      logCommandError(data.name, error);
       await DiscordRequest(`webhooks/${applicationId}/${token}/messages/@original`, {
         method: 'PATCH',
         body: responseEmbed(

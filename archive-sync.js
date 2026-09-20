@@ -220,40 +220,56 @@ async function moveCategoriesToBottom(categoryIds, channels) {
 
 async function archiveCategories(categories, channels) {
   const completed = [];
-  try {
-    for (const category of categories) {
-      if (!isArchivedCategory(category)) {
+  const warnings = [];
+
+  for (const category of categories) {
+    if (!isArchivedCategory(category)) {
+      try {
         await DiscordRequest(`channels/${category.id}`, {
           method: 'PATCH',
           body: { name: `${ARCHIVED_PREFIX}${category.name}` },
         });
+      } catch (error) {
+        warnings.push({
+          action: 'Kategorie umbenennen',
+          categoryName: originalCategoryName(category),
+          channelName: category.name,
+          channelId: category.id,
+          error,
+        });
+        continue;
       }
+    }
 
-      const categoryChannels = [
-        category,
-        ...channels.filter((channel) => channel.parent_id === category.id),
-      ];
-      for (const channel of categoryChannels) {
-        try {
-          await setChannelReadOnly(channel);
-        } catch (error) {
-          throw new Error(
-            `"${channel.name}" in Kategorie "${originalCategoryName(category)}" konnte nicht schreibgeschützt werden: ${error.message}`,
-            { cause: error },
-          );
-        }
+    const categoryChannels = [
+      category,
+      ...channels.filter((channel) => channel.parent_id === category.id),
+    ];
+    for (const channel of categoryChannels) {
+      try {
+        await setChannelReadOnly(channel);
+      } catch (error) {
+        warnings.push({
+          action: 'Schreibschutz setzen',
+          categoryName: originalCategoryName(category),
+          channelName: channel.name,
+          channelId: channel.id,
+          error,
+        });
       }
-      completed.push(category);
     }
-  } finally {
-    if (completed.length > 0) {
-      await moveCategoriesToBottom(
-        completed.map((category) => category.id),
-        channels,
-      );
-      await recordArchivedCategories(completed);
-    }
+    completed.push(category);
   }
+
+  if (completed.length > 0) {
+    await moveCategoriesToBottom(
+      completed.map((category) => category.id),
+      channels,
+    );
+    await recordArchivedCategories(completed);
+  }
+
+  return { completed, warnings };
 }
 
 export async function previewArchivedCategories() {
@@ -294,8 +310,12 @@ export async function archiveCategory(categoryId) {
     return { archived: false, name: category.name };
   }
 
-  await archiveCategories([category], channels);
-  return { archived: true, name: category.name };
+  const result = await archiveCategories([category], channels);
+  return {
+    archived: result.completed.length === 1,
+    name: category.name,
+    warnings: result.warnings,
+  };
 }
 
 export async function archiveAllOldCategories() {
@@ -310,10 +330,13 @@ export async function archiveAllOldCategories() {
   );
   const categories = plan.map(({ category }) => category);
 
-  if (categories.length > 0) {
-    await archiveCategories(categories, channels);
-  }
-  return { categories: categories.map((category) => category.name) };
+  const result = categories.length > 0
+    ? await archiveCategories(categories, channels)
+    : { completed: [], warnings: [] };
+  return {
+    categories: result.completed.map((category) => category.name),
+    warnings: result.warnings,
+  };
 }
 
 export async function addExceptions(categoryIds) {

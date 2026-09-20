@@ -29,6 +29,8 @@ werden.
 Beim Archivieren erhält nur die Kategorie das Präfix `archived-` und wird nach unten
 verschoben. Die Namen ihrer Unterkanäle bleiben erhalten. Kategorie und Unterkanäle werden
 für `@everyone` lesbar, aber schreibgeschützt; andere bestehende Rollenrechte bleiben erhalten.
+Kann Discord den Schreibschutz für einzelne Kanäle nicht setzen, fährt der Bot mit den übrigen
+Kanälen fort und nennt die betroffenen Kanäle in der Antwort und im strukturierten Bot-Log.
 
 Der Bot berücksichtigt nur zukünftige Einträge mit `entityType: "LECTURE"`. `EVENT`,
 `BLOCKER` und diese von Rapla falsch klassifizierten Einträge werden ignoriert:

@@ -1,5 +1,16 @@
 import 'dotenv/config';
 
+export class DiscordApiError extends Error {
+  constructor({ endpoint, method, status, code, message }) {
+    super(message);
+    this.name = 'DiscordApiError';
+    this.endpoint = endpoint;
+    this.method = method;
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function DiscordRequest(endpoint, options) {
   const url = 'https://discord.com/api/v10/' + endpoint;
   if (options.body) options.body = JSON.stringify(options.body);
@@ -12,8 +23,20 @@ export async function DiscordRequest(endpoint, options) {
     ...options
   });
   if (!res.ok) {
-    const data = await res.text();
-    throw new Error(`Discord API returned HTTP ${res.status}: ${data}`);
+    const rawData = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      data = { message: rawData };
+    }
+    throw new DiscordApiError({
+      endpoint,
+      method: options.method,
+      status: res.status,
+      code: data.code,
+      message: data.message || 'Unknown Discord API error',
+    });
   }
   return res;
 }
