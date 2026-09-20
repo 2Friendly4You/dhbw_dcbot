@@ -24,6 +24,11 @@ const READ_ONLY_DENY =
   CREATE_PUBLIC_THREADS |
   CREATE_PRIVATE_THREADS |
   SEND_MESSAGES_IN_THREADS;
+const DEFAULT_IGNORED_LECTURE_NAMES = [
+  'Aufbau StudiInfoTag - VL nur online',
+  'StudiInfoTag - VL nur online',
+  'geblockt für Klausur',
+];
 
 export function normalizeName(value) {
   return value
@@ -65,6 +70,7 @@ async function fetchGuildChannels() {
 
 export function getExpectedCategories(events, now = new Date()) {
   const expected = new Map();
+  const ignoredNames = new Set(DEFAULT_IGNORED_LECTURE_NAMES.map(normalizeName));
 
   for (const event of events) {
     if (
@@ -77,6 +83,9 @@ export function getExpectedCategories(events, now = new Date()) {
     }
 
     const displayName = event.name.trim();
+    if (ignoredNames.has(normalizeName(displayName))) {
+      continue;
+    }
     expected.set(normalizeName(displayName), displayName);
   }
   return expected;

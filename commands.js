@@ -78,3 +78,7 @@ await installGuildCommands(
   process.env.DISCORD_GUILD_ID,
   COMMANDS,
 );
+
+console.log(
+  `${COMMANDS.length} Slash-Commands für Server ${process.env.DISCORD_GUILD_ID} registriert.`,
+);

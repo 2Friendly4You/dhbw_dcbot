@@ -45,6 +45,16 @@ test('uses only future lecture events as expected categories', () => {
     },
     {
       entityType: 'LECTURE',
+      name: ' Aufbau StudiInfoTag - VL nur online ',
+      endTime: '2026-09-19T10:00:00.000Z',
+    },
+    {
+      entityType: 'LECTURE',
+      name: ' geblockt für Klausur ',
+      endTime: '2026-09-19T10:00:00.000Z',
+    },
+    {
+      entityType: 'LECTURE',
       name: 'Altes Fach',
       endTime: '2026-09-17T10:00:00.000Z',
     },
