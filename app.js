@@ -462,7 +462,6 @@ app.post(
 
     res.send({
       type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { flags: InteractionResponseFlags.EPHEMERAL },
     });
 
     try {
