@@ -26,6 +26,24 @@ test('finds expected categories that do not exist yet', () => {
   assert.deepEqual(getMissingCategoryNames(channels, expected), ['Data Science']);
 });
 
+test('treats an aliased category as the expected course', () => {
+  const channels = [{ id: '1', type: 4, name: 'Informatik 2', position: 0 }];
+  const expected = new Map([
+    ['software-engineering', 'Software Engineering'],
+  ]);
+  const aliases = [
+    {
+      normalizedExpectedName: 'software-engineering',
+      expectedName: 'Software Engineering',
+      categoryId: '1',
+      categoryName: 'Informatik 2',
+    },
+  ];
+
+  assert.deepEqual(getMissingCategoryNames(channels, expected, aliases), []);
+  assert.deepEqual(buildArchivePlan(channels, expected, new Set(), aliases), []);
+});
+
 test('uses only future lecture events as expected categories', () => {
   const events = [
     {

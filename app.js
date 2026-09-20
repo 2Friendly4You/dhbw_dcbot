@@ -7,14 +7,18 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import {
+  addCourseAlias,
   addException,
   archiveAllOldCategories,
   archiveCategory,
   createMissingCourseCategories,
   listExceptions,
+  listCourseAliases,
+  listExpectedCourseNames,
   previewArchivedCategories,
   previewMissingCourseCategories,
   removeException,
+  removeCourseAlias,
 } from './archive-sync.js';
 import { DiscordRequest } from './utils.js';
 
@@ -30,6 +34,35 @@ const COLORS = {
 
 function selectedCategoryId(options) {
   return options?.find((option) => option.name === 'kategorie')?.value;
+}
+
+function selectedCourseName(options) {
+  return options?.find((option) => option.name === 'fach')?.value;
+}
+
+function focusedOption(data) {
+  return data.options?.[0]?.options?.find((option) => option.focused);
+}
+
+function autocompleteChoices(names, query) {
+  const normalizedQuery = query.trim().toLocaleLowerCase('de-DE');
+  return names
+    .filter((name) => name.toLocaleLowerCase('de-DE').includes(normalizedQuery))
+    .slice(0, 25)
+    .map((name) => ({ name, value: name }));
+}
+
+async function autocompleteCourseAlias(data) {
+  const subcommand = data.options?.[0];
+  const option = focusedOption(data);
+  if (data.name !== 'coursealias' || option?.name !== 'fach') {
+    return [];
+  }
+
+  const names = subcommand.name === 'remove'
+    ? (await listCourseAliases()).map((alias) => alias.expectedName)
+    : await listExpectedCourseNames();
+  return autocompleteChoices(names, String(option.value || ''));
 }
 
 function formatList(values) {
@@ -74,6 +107,9 @@ function formatPreview(result) {
     : ['Keine Kategorien würden archiviert.'];
   const exceptionNames = result.exceptions.map((exception) => exception.name);
   const archivedNames = result.archivedCategories.map((category) => category.name);
+  const aliasNames = result.courseAliases.map(
+    (alias) => `${alias.expectedName} → ${alias.categoryName}`,
+  );
 
   return responseEmbed(
     'Archivierungsvorschau',
@@ -89,6 +125,7 @@ function formatPreview(result) {
         name: 'Lokal als archiviert gespeichert',
         value: formatList(archivedNames),
       },
+      { name: 'Fachzuordnungen', value: formatList(aliasNames) },
     ],
   );
 }
@@ -175,6 +212,46 @@ async function executeCommand(data) {
         result.categories.length > 0 ? COLORS.warning : COLORS.success,
       );
     }
+    case 'coursealias': {
+      const subcommand = data.options?.[0];
+      if (subcommand?.name === 'add') {
+        const result = await addCourseAlias(
+          selectedCourseName(subcommand.options),
+          selectedCategoryId(subcommand.options),
+        );
+        return responseEmbed(
+          result.added ? 'Fachzuordnung hinzugefügt' : 'Fachzuordnung aktualisiert',
+          `**${result.expectedName}** → **${result.category.name}**`,
+          COLORS.success,
+        );
+      }
+      if (subcommand?.name === 'remove') {
+        const courseName = selectedCourseName(subcommand.options);
+        const removed = await removeCourseAlias(courseName);
+        return responseEmbed(
+          removed ? 'Fachzuordnung entfernt' : 'Keine Zuordnung gefunden',
+          removed
+            ? `Die Zuordnung für **${courseName}** wurde entfernt.`
+            : `Für **${courseName}** war keine Zuordnung gespeichert.`,
+          removed ? COLORS.success : COLORS.info,
+        );
+      }
+      if (subcommand?.name === 'list') {
+        const aliases = await listCourseAliases();
+        return responseEmbed(
+          'Fachzuordnungen',
+          aliases.length > 0
+            ? aliases
+              .map(
+                (alias) =>
+                  `- **${alias.expectedName}** → **${alias.categoryName}**`,
+              )
+              .join('\n')
+            : 'Keine Fachzuordnungen gespeichert.',
+        );
+      }
+      throw new Error('Unknown coursealias subcommand');
+    }
     default:
       throw new Error(`Unknown command: ${data.name}`);
   }
@@ -194,6 +271,28 @@ app.post(
 
     if (type === InteractionType.PING) {
       return res.send({ type: InteractionResponseType.PONG });
+    }
+    if (type === InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE) {
+      if (!isAdministrator(member)) {
+        return res.send({
+          type: InteractionResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
+          data: { choices: [] },
+        });
+      }
+
+      try {
+        const choices = await autocompleteCourseAlias(data);
+        return res.send({
+          type: InteractionResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
+          data: { choices },
+        });
+      } catch (error) {
+        console.error('Course alias autocomplete failed', error);
+        return res.send({
+          type: InteractionResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
+          data: { choices: [] },
+        });
+      }
     }
     if (type !== InteractionType.APPLICATION_COMMAND) {
       return res.status(400).json({ error: 'unknown interaction type' });

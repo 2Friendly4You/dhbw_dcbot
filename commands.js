@@ -67,6 +67,47 @@ const COMMANDS = [
     name: 'createcoursespreview',
     description: 'Zeigt fehlende Fachkategorien ohne sie zu erstellen',
   },
+  {
+    ...GUILD_COMMAND,
+    name: 'coursealias',
+    description: 'Ordnet Rapla-Fächer anders benannten Kategorien zu',
+    options: [
+      {
+        type: 1,
+        name: 'add',
+        description: 'Fügt eine Fachzuordnung hinzu oder aktualisiert sie',
+        options: [
+          {
+            type: 3,
+            name: 'fach',
+            description: 'Erwarteter Fachname aus Rapla',
+            required: true,
+            autocomplete: true,
+          },
+          CATEGORY_OPTION,
+        ],
+      },
+      {
+        type: 1,
+        name: 'remove',
+        description: 'Entfernt eine Fachzuordnung',
+        options: [
+          {
+            type: 3,
+            name: 'fach',
+            description: 'Erwarteter Fachname aus Rapla',
+            required: true,
+            autocomplete: true,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: 'list',
+        description: 'Zeigt alle Fachzuordnungen',
+      },
+    ],
+  },
 ];
 
 if (!process.env.APP_ID || !process.env.DISCORD_GUILD_ID) {

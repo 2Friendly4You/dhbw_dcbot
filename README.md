@@ -39,6 +39,9 @@ keine Kategorien.
 | `/archiveexception list` | Zeigt alle geschützten Kategorien |
 | `/createcourses` | Erstellt fehlende Fachkategorien mit `general` und `bilder` |
 | `/createcoursespreview` | Zeigt vorher, welche Fachkategorien erstellt würden |
+| `/coursealias add fach kategorie` | Ordnet ein erwartetes Rapla-Fach einer anders benannten Kategorie zu |
+| `/coursealias remove fach` | Entfernt eine Fachzuordnung |
+| `/coursealias list` | Zeigt alle Fachzuordnungen |
 
 Archivieren bedeutet:
 
@@ -50,6 +53,24 @@ Archivieren bedeutet:
 
 Ausnahmen und archivierte Kategorien werden minimal in `data/archive-state.json` gespeichert.
 Die Datei wird automatisch erstellt und nicht versioniert.
+
+### Anders benannte Fachkategorien
+
+Mit `/coursealias add` kann ein Rapla-Fach einer bestehenden, anders benannten
+Discord-Kategorie zugeordnet werden. Beispiel:
+
+```text
+Software Engineering → Informatik 2
+```
+
+Danach behandelt der Bot `Informatik 2` als aktive Kategorie für `Software Engineering`.
+`/createcourses` erstellt keine zusätzliche Kategorie und `/archiveall` archiviert
+`Informatik 2` nicht, solange das Fach in Rapla zukünftig vorkommt. Die Zuordnungen werden
+ebenfalls in `data/archive-state.json` gespeichert.
+
+Discord schlägt beim Feld `fach` automatisch aktuelle Rapla-Fächer vor. Beim Entfernen werden
+nur gespeicherte Zuordnungen vorgeschlagen. Das Feld `kategorie` verwendet Discords nativen
+Kategorie-Picker und zeigt ausschließlich Kategorien des Servers.
 
 ## Rapla-Filter
 

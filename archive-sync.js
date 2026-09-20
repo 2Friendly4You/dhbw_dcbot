@@ -2,9 +2,11 @@ import 'dotenv/config';
 import { DiscordRequest } from './utils.js';
 import {
   addArchiveException,
+  deleteCourseAlias,
   readState,
   recordArchivedCategories,
   removeArchiveException,
+  saveCourseAlias,
 } from './state-store.js';
 
 const CATEGORY_TYPE = 4;
@@ -29,6 +31,7 @@ const DEFAULT_IGNORED_LECTURE_NAMES = [
   'StudiInfoTag - VL nur online',
   'geblockt für Klausur',
 ];
+let expectedCourseNameCache = { expiresAt: 0, names: [] };
 
 export function normalizeName(value) {
   return value
@@ -121,13 +124,42 @@ async function loadContext() {
   };
 }
 
-export function buildArchivePlan(channels, expectedCategories, exceptionIds) {
+function getActiveAliasCategoryIds(channels, expectedCategories, aliases) {
+  const categoryIds = new Set(
+    channels
+      .filter((channel) => channel.type === CATEGORY_TYPE)
+      .map((category) => category.id),
+  );
+
+  return new Set(
+    aliases
+      .filter(
+        (alias) =>
+          expectedCategories.has(alias.normalizedExpectedName) &&
+          categoryIds.has(alias.categoryId),
+      )
+      .map((alias) => alias.categoryId),
+  );
+}
+
+export function buildArchivePlan(
+  channels,
+  expectedCategories,
+  exceptionIds,
+  aliases = [],
+) {
+  const activeAliasCategoryIds = getActiveAliasCategoryIds(
+    channels,
+    expectedCategories,
+    aliases,
+  );
   return channels
     .filter((channel) => channel.type === CATEGORY_TYPE)
     .filter(
       (category) =>
         !isArchivedCategory(category) &&
         !exceptionIds.has(category.id) &&
+        !activeAliasCategoryIds.has(category.id) &&
         !expectedCategories.has(normalizeName(category.name)),
     )
     .map((category) => ({
@@ -200,7 +232,12 @@ async function archiveCategories(categories, channels) {
 export async function previewArchivedCategories() {
   const { channels, state, expectedCategories } = await loadContext();
   const exceptionIds = new Set(state.exceptions.map((item) => item.id));
-  const plan = buildArchivePlan(channels, expectedCategories, exceptionIds);
+  const plan = buildArchivePlan(
+    channels,
+    expectedCategories,
+    exceptionIds,
+    state.courseAliases,
+  );
 
   return {
     expectedCategories: [...expectedCategories.values()].sort((a, b) =>
@@ -208,6 +245,7 @@ export async function previewArchivedCategories() {
     ),
     exceptions: state.exceptions,
     archivedCategories: state.archivedCategories,
+    courseAliases: state.courseAliases,
     categories: plan.map(({ category, children }) => ({
       name: category.name,
       channels: children.map((channel) => channel.name),
@@ -235,7 +273,12 @@ export async function archiveCategory(categoryId) {
 export async function archiveAllOldCategories() {
   const { channels, state, expectedCategories } = await loadContext();
   const exceptionIds = new Set(state.exceptions.map((item) => item.id));
-  const plan = buildArchivePlan(channels, expectedCategories, exceptionIds);
+  const plan = buildArchivePlan(
+    channels,
+    expectedCategories,
+    exceptionIds,
+    state.courseAliases,
+  );
   const categories = plan.map(({ category }) => category);
 
   if (categories.length > 0) {
@@ -267,27 +310,48 @@ export async function listExceptions() {
   return state.exceptions;
 }
 
-export function getMissingCategoryNames(channels, expectedCategories) {
+export function getMissingCategoryNames(channels, expectedCategories, aliases = []) {
   const existingNames = new Set(
     channels
       .filter((channel) => channel.type === CATEGORY_TYPE)
       .map((category) => normalizeName(originalCategoryName(category))),
   );
+  const aliasedExpectedNames = new Set(
+    aliases
+      .filter((alias) =>
+        channels.some(
+          (channel) =>
+            channel.type === CATEGORY_TYPE && channel.id === alias.categoryId,
+        ))
+      .map((alias) => alias.normalizedExpectedName),
+  );
   return [...expectedCategories.entries()]
-    .filter(([normalizedName]) => !existingNames.has(normalizedName))
+    .filter(
+      ([normalizedName]) =>
+        !existingNames.has(normalizedName) &&
+        !aliasedExpectedNames.has(normalizedName),
+    )
     .map(([, displayName]) => displayName);
 }
 
 export async function previewMissingCourseCategories() {
-  const { channels, expectedCategories } = await loadContext();
+  const { channels, expectedCategories, state } = await loadContext();
   return {
-    categories: getMissingCategoryNames(channels, expectedCategories),
+    categories: getMissingCategoryNames(
+      channels,
+      expectedCategories,
+      state.courseAliases,
+    ),
   };
 }
 
 export async function createMissingCourseCategories() {
-  const { channels, expectedCategories } = await loadContext();
-  const missingNames = getMissingCategoryNames(channels, expectedCategories);
+  const { channels, expectedCategories, state } = await loadContext();
+  const missingNames = getMissingCategoryNames(
+    channels,
+    expectedCategories,
+    state.courseAliases,
+  );
   const created = [];
 
   for (const categoryName of missingNames) {
@@ -314,4 +378,53 @@ export async function createMissingCourseCategories() {
   }
 
   return { categories: created };
+}
+
+export async function addCourseAlias(expectedName, categoryId) {
+  const { channels, expectedCategories } = await loadContext();
+  const normalizedExpectedName = normalizeName(expectedName);
+  const canonicalExpectedName = expectedCategories.get(normalizedExpectedName);
+  if (!canonicalExpectedName) {
+    throw new Error(`Unknown expected course: ${expectedName}`);
+  }
+
+  const category = channels.find(
+    (channel) => channel.type === CATEGORY_TYPE && channel.id === categoryId,
+  );
+  if (!category) {
+    throw new Error('The selected category does not exist');
+  }
+
+  const added = await saveCourseAlias({
+    normalizedExpectedName,
+    expectedName: canonicalExpectedName,
+    categoryId: category.id,
+    categoryName: category.name,
+  });
+  return { added, expectedName: canonicalExpectedName, category };
+}
+
+export async function removeCourseAlias(expectedName) {
+  return deleteCourseAlias(normalizeName(expectedName));
+}
+
+export async function listCourseAliases() {
+  const state = await readState();
+  return state.courseAliases;
+}
+
+export async function listExpectedCourseNames() {
+  if (expectedCourseNameCache.expiresAt > Date.now()) {
+    return expectedCourseNameCache.names;
+  }
+
+  const events = await fetchLectures();
+  const names = [...getExpectedCategories(events).values()].sort((a, b) =>
+    a.localeCompare(b, 'de'),
+  );
+  expectedCourseNameCache = {
+    expiresAt: Date.now() + 5 * 60 * 1000,
+    names,
+  };
+  return names;
 }

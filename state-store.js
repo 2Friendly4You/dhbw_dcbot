@@ -9,6 +9,7 @@ function emptyState() {
   return {
     exceptions: [],
     archivedCategories: [],
+    courseAliases: [],
   };
 }
 
@@ -20,6 +21,7 @@ export async function readState() {
       archivedCategories: Array.isArray(state.archivedCategories)
         ? state.archivedCategories
         : [],
+      courseAliases: Array.isArray(state.courseAliases) ? state.courseAliases : [],
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
@@ -81,5 +83,30 @@ export function recordArchivedCategories(categories) {
       });
     }
     state.archivedCategories = [...archivedById.values()];
+  });
+}
+
+export function saveCourseAlias(alias) {
+  return mutateState((state) => {
+    const normalizedExpectedName = alias.normalizedExpectedName;
+    const existing = state.courseAliases.find(
+      (item) => item.normalizedExpectedName === normalizedExpectedName,
+    );
+    if (existing) {
+      Object.assign(existing, alias);
+      return false;
+    }
+    state.courseAliases.push(alias);
+    return true;
+  });
+}
+
+export function deleteCourseAlias(normalizedExpectedName) {
+  return mutateState((state) => {
+    const previousLength = state.courseAliases.length;
+    state.courseAliases = state.courseAliases.filter(
+      (item) => item.normalizedExpectedName !== normalizedExpectedName,
+    );
+    return state.courseAliases.length !== previousLength;
   });
 }
