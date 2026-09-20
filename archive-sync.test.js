@@ -5,6 +5,7 @@ import {
   getExpectedCategories,
   getMissingCategoryNames,
   normalizeName,
+  orderCreatedCategories,
 } from './archive-sync.js';
 
 test('normalizes Discord and Rapla category names consistently', () => {
@@ -124,5 +125,32 @@ test('retries prefixed categories that were not recorded as completed', () => {
       new Set(['2']),
     ).map(({ category }) => category.id),
     ['1'],
+  );
+});
+
+test('places created courses after four fixed categories and before archives', () => {
+  const categories = [
+    { id: 'hidden', name: 'Admin' },
+    { id: 'general', name: 'Allgemein' },
+    { id: 'info', name: 'Information' },
+    { id: 'voice', name: 'Sprachkanäle' },
+    { id: 'old-course', name: 'Datenbanken' },
+    { id: 'archive', name: 'archived-Altes Fach' },
+    { id: 'new-1', name: 'Software Engineering' },
+    { id: 'new-2', name: 'Netztechnik' },
+  ];
+
+  assert.deepEqual(
+    orderCreatedCategories(categories, ['new-1', 'new-2']).map(({ id }) => id),
+    [
+      'hidden',
+      'general',
+      'info',
+      'voice',
+      'new-1',
+      'new-2',
+      'old-course',
+      'archive',
+    ],
   );
 });

@@ -24,6 +24,10 @@ Discord ergänzt Fachnamen per Autocomplete und Kategorien über den nativen Kat
 Beim Hinzufügen von Archivierungsausnahmen können bis zu 25 Kategorien gleichzeitig ausgewählt
 werden.
 
+Neue Fachkategorien werden direkt nach den ersten vier Kategorien des Servers einsortiert.
+Dabei zählen auch Kategorien mit, die nur für Administratoren sichtbar sind. Archivierte
+Kategorien bleiben darunter.
+
 Erfolgreiche Befehle und ihre Ergebnisse sind im jeweiligen Kanal sichtbar. Discord zeigt beim
 ursprünglichen Slash-Command, wer ihn ausgeführt hat. Nur Meldungen über fehlende Adminrechte
 bleiben privat.

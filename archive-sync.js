@@ -11,6 +11,7 @@ import {
 
 const CATEGORY_TYPE = 4;
 const TEXT_CHANNEL_TYPE = 0;
+const FIXED_TOP_CATEGORY_COUNT = 4;
 const ARCHIVED_PREFIX = process.env.ARCHIVED_PREFIX || 'archived-';
 const VIEW_CHANNEL = 1024n;
 const SEND_MESSAGES = 2048n;
@@ -387,6 +388,26 @@ export function getMissingCategoryNames(channels, expectedCategories, aliases = 
     .map(([, displayName]) => displayName);
 }
 
+export function orderCreatedCategories(
+  categories,
+  createdCategoryIds,
+  fixedTopCount = FIXED_TOP_CATEGORY_COUNT,
+) {
+  const createdIds = new Set(createdCategoryIds);
+  const createdCategories = categories.filter((category) =>
+    createdIds.has(category.id),
+  );
+  const existingCategories = categories.filter(
+    (category) => !createdIds.has(category.id),
+  );
+
+  return [
+    ...existingCategories.slice(0, fixedTopCount),
+    ...createdCategories,
+    ...existingCategories.slice(fixedTopCount),
+  ];
+}
+
 export async function previewMissingCourseCategories() {
   const { channels, expectedCategories, state } = await loadContext();
   return {
@@ -406,6 +427,7 @@ export async function createMissingCourseCategories() {
     state.courseAliases,
   );
   const created = [];
+  const createdCategoryIds = [];
 
   for (const categoryName of missingNames) {
     const categoryResponse = await DiscordRequest(
@@ -428,6 +450,27 @@ export async function createMissingCourseCategories() {
       });
     }
     created.push(categoryName);
+    createdCategoryIds.push(category.id);
+  }
+
+  if (created.length > 0) {
+    const updatedChannels = await fetchGuildChannels();
+    const orderedCategories = updatedChannels
+      .filter((channel) => channel.type === CATEGORY_TYPE)
+      .sort((a, b) => a.position - b.position);
+    const reorderedCategories = orderCreatedCategories(
+      orderedCategories,
+      createdCategoryIds,
+    );
+    const positions = orderedCategories.map((category) => category.position);
+
+    await DiscordRequest(`guilds/${process.env.DISCORD_GUILD_ID}/channels`, {
+      method: 'PATCH',
+      body: reorderedCategories.map((category, index) => ({
+        id: category.id,
+        position: positions[index],
+      })),
+    });
   }
 
   return { categories: created };
