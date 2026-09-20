@@ -95,10 +95,34 @@ test('plans only inactive, non-exempt, non-archived categories', () => {
   ];
   const expected = new Map([['datenbanken', 'Datenbanken']]);
 
-  assert.deepEqual(buildArchivePlan(channels, expected, new Set(['2'])), [
+  assert.deepEqual(buildArchivePlan(
+    channels,
+    expected,
+    new Set(['2']),
+    [],
+    new Set(['4']),
+  ), [
     {
       category: channels[2],
       children: [channels[4], channels[5]],
     },
   ]);
+});
+
+test('retries prefixed categories that were not recorded as completed', () => {
+  const channels = [
+    { id: '1', type: 4, name: 'archived-Altes Fach', position: 0 },
+    { id: '2', type: 4, name: 'archived-Fertig', position: 1 },
+  ];
+
+  assert.deepEqual(
+    buildArchivePlan(
+      channels,
+      new Map(),
+      new Set(),
+      [],
+      new Set(['2']),
+    ).map(({ category }) => category.id),
+    ['1'],
+  );
 });

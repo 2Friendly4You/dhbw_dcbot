@@ -149,6 +149,7 @@ export function buildArchivePlan(
   expectedCategories,
   exceptionIds,
   aliases = [],
+  archivedCategoryIds = new Set(),
 ) {
   const activeAliasCategoryIds = getActiveAliasCategoryIds(
     channels,
@@ -159,10 +160,10 @@ export function buildArchivePlan(
     .filter((channel) => channel.type === CATEGORY_TYPE)
     .filter(
       (category) =>
-        !isArchivedCategory(category) &&
+        !archivedCategoryIds.has(category.id) &&
         !exceptionIds.has(category.id) &&
         !activeAliasCategoryIds.has(category.id) &&
-        !expectedCategories.has(normalizeName(category.name)),
+        !expectedCategories.has(normalizeName(originalCategoryName(category))),
     )
     .map((category) => ({
       category,
@@ -172,8 +173,8 @@ export function buildArchivePlan(
     }));
 }
 
-async function setCategoryReadOnly(category) {
-  const currentOverwrite = category.permission_overwrites?.find(
+async function setChannelReadOnly(channel) {
+  const currentOverwrite = channel.permission_overwrites?.find(
     (overwrite) =>
       overwrite.id === process.env.DISCORD_GUILD_ID && overwrite.type === 0,
   );
@@ -181,7 +182,7 @@ async function setCategoryReadOnly(category) {
   const currentDeny = BigInt(currentOverwrite?.deny || 0);
 
   await DiscordRequest(
-    `channels/${category.id}/permissions/${process.env.DISCORD_GUILD_ID}`,
+    `channels/${channel.id}/permissions/${process.env.DISCORD_GUILD_ID}`,
     {
       method: 'PUT',
       body: {
@@ -218,17 +219,41 @@ async function moveCategoriesToBottom(categoryIds, channels) {
 }
 
 async function archiveCategories(categories, channels) {
-  await Promise.all(
-    categories.map(async (category) => {
-      await DiscordRequest(`channels/${category.id}`, {
-        method: 'PATCH',
-        body: { name: `${ARCHIVED_PREFIX}${category.name}` },
-      });
-      await setCategoryReadOnly(category);
-    }),
-  );
-  await moveCategoriesToBottom(categories.map((category) => category.id), channels);
-  await recordArchivedCategories(categories);
+  const completed = [];
+  try {
+    for (const category of categories) {
+      if (!isArchivedCategory(category)) {
+        await DiscordRequest(`channels/${category.id}`, {
+          method: 'PATCH',
+          body: { name: `${ARCHIVED_PREFIX}${category.name}` },
+        });
+      }
+
+      const categoryChannels = [
+        category,
+        ...channels.filter((channel) => channel.parent_id === category.id),
+      ];
+      for (const channel of categoryChannels) {
+        try {
+          await setChannelReadOnly(channel);
+        } catch (error) {
+          throw new Error(
+            `"${channel.name}" in Kategorie "${originalCategoryName(category)}" konnte nicht schreibgeschützt werden: ${error.message}`,
+            { cause: error },
+          );
+        }
+      }
+      completed.push(category);
+    }
+  } finally {
+    if (completed.length > 0) {
+      await moveCategoriesToBottom(
+        completed.map((category) => category.id),
+        channels,
+      );
+      await recordArchivedCategories(completed);
+    }
+  }
 }
 
 export async function previewArchivedCategories() {
@@ -239,6 +264,7 @@ export async function previewArchivedCategories() {
     expectedCategories,
     exceptionIds,
     state.courseAliases,
+    new Set(state.archivedCategories.map((category) => category.id)),
   );
 
   return {
@@ -280,6 +306,7 @@ export async function archiveAllOldCategories() {
     expectedCategories,
     exceptionIds,
     state.courseAliases,
+    new Set(state.archivedCategories.map((category) => category.id)),
   );
   const categories = plan.map(({ category }) => category);
 
