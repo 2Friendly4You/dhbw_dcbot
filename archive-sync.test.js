@@ -6,12 +6,21 @@ import {
   getMissingCategoryNames,
   normalizeName,
   orderCreatedCategories,
+  planCourseSetup,
   readOnlyOverwrite,
 } from './archive-sync.js';
 
 test('normalizes Discord and Rapla category names consistently', () => {
   assert.equal(normalizeName('  Formale Sprachen  '), 'formale-sprachen');
   assert.equal(normalizeName('Angewandte-Mathematik'), 'angewandte-mathematik');
+  assert.equal(normalizeName('Übung'), 'uebung');
+  assert.equal(normalizeName('Uebung'), 'uebung');
+  assert.equal(normalizeName('Ubung'), 'ubung');
+  assert.equal(normalizeName('Straße'), 'strasse');
+  assert.equal(normalizeName('Strasse'), 'strasse');
+  assert.equal(normalizeName('C++'), 'cplusplus');
+  assert.equal(normalizeName('C#'), 'csharp');
+  assert.equal(normalizeName('C'), 'c');
 });
 
 test('finds expected categories that do not exist yet', () => {
@@ -26,6 +35,30 @@ test('finds expected categories that do not exist yet', () => {
   ]);
 
   assert.deepEqual(getMissingCategoryNames(channels, expected), ['Data Science']);
+});
+
+test('resumes a course category that is missing its default channels', () => {
+  const channels = [
+    { id: '1', type: 4, name: 'Datenbanken' },
+    { id: '2', type: 0, name: 'general', parent_id: '1' },
+    { id: '3', type: 4, name: 'Netztechnik' },
+    { id: '4', type: 0, name: 'ankuendigungen', parent_id: '3' },
+    { id: '5', type: 4, name: 'archived-Altes Fach' },
+  ];
+  const longName = 'L'.repeat(101);
+  const expected = new Map([
+    ['datenbanken', 'Datenbanken'],
+    ['netztechnik', 'Netztechnik'],
+    ['altes-fach', 'Altes Fach'],
+    ['data-science', 'Data Science'],
+    ['l'.repeat(101), longName],
+  ]);
+
+  assert.deepEqual(planCourseSetup(channels, expected), {
+    creatable: ['Data Science'],
+    tooLong: [longName],
+    repairs: [{ id: '1', name: 'Datenbanken', missing: ['bilder'] }],
+  });
 });
 
 test('treats an aliased category as the expected course', () => {
