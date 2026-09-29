@@ -6,11 +6,21 @@ import {
   getMissingCategoryNames,
   normalizeName,
   orderCreatedCategories,
+  planCourseSetup,
+  readOnlyOverwrite,
 } from './archive-sync.js';
 
 test('normalizes Discord and Rapla category names consistently', () => {
   assert.equal(normalizeName('  Formale Sprachen  '), 'formale-sprachen');
   assert.equal(normalizeName('Angewandte-Mathematik'), 'angewandte-mathematik');
+  assert.equal(normalizeName('Übung'), 'uebung');
+  assert.equal(normalizeName('Uebung'), 'uebung');
+  assert.equal(normalizeName('Ubung'), 'ubung');
+  assert.equal(normalizeName('Straße'), 'strasse');
+  assert.equal(normalizeName('Strasse'), 'strasse');
+  assert.equal(normalizeName('C++'), 'cplusplus');
+  assert.equal(normalizeName('C#'), 'csharp');
+  assert.equal(normalizeName('C'), 'c');
 });
 
 test('finds expected categories that do not exist yet', () => {
@@ -25,6 +35,30 @@ test('finds expected categories that do not exist yet', () => {
   ]);
 
   assert.deepEqual(getMissingCategoryNames(channels, expected), ['Data Science']);
+});
+
+test('resumes a course category that is missing its default channels', () => {
+  const channels = [
+    { id: '1', type: 4, name: 'Datenbanken' },
+    { id: '2', type: 0, name: 'general', parent_id: '1' },
+    { id: '3', type: 4, name: 'Netztechnik' },
+    { id: '4', type: 0, name: 'ankuendigungen', parent_id: '3' },
+    { id: '5', type: 4, name: 'archived-Altes Fach' },
+  ];
+  const longName = 'L'.repeat(101);
+  const expected = new Map([
+    ['datenbanken', 'Datenbanken'],
+    ['netztechnik', 'Netztechnik'],
+    ['altes-fach', 'Altes Fach'],
+    ['data-science', 'Data Science'],
+    ['l'.repeat(101), longName],
+  ]);
+
+  assert.deepEqual(planCourseSetup(channels, expected), {
+    creatable: ['Data Science'],
+    tooLong: [longName],
+    repairs: [{ id: '1', name: 'Datenbanken', missing: ['bilder'] }],
+  });
 });
 
 test('treats an aliased category as the expected course', () => {
@@ -128,6 +162,21 @@ test('retries prefixed categories that were not recorded as completed', () => {
   );
 });
 
+test('locks archived voice channels for everyone', () => {
+  const CONNECT = 1048576n;
+  const SPEAK = 2097152n;
+  const SEND_MESSAGES = 2048n;
+  const VIEW_CHANNEL = 1024n;
+  const overwrite = readOnlyOverwrite(CONNECT | SPEAK | SEND_MESSAGES, 0);
+
+  assert.equal((BigInt(overwrite.deny) & CONNECT) === CONNECT, true);
+  assert.equal((BigInt(overwrite.deny) & SPEAK) === SPEAK, true);
+  assert.equal((BigInt(overwrite.deny) & SEND_MESSAGES) === SEND_MESSAGES, true);
+  assert.equal((BigInt(overwrite.allow) & VIEW_CHANNEL) === VIEW_CHANNEL, true);
+  assert.equal(BigInt(overwrite.allow) & CONNECT, 0n);
+  assert.equal(BigInt(overwrite.allow) & SPEAK, 0n);
+});
+
 test('places created courses after four fixed categories and before archives', () => {
   const categories = [
     { id: 'hidden', name: 'Admin' },
@@ -152,5 +201,19 @@ test('places created courses after four fixed categories and before archives', (
       'old-course',
       'archive',
     ],
+  );
+});
+
+test('keeps an archived category below courses when it sits in the top slots', () => {
+  const categories = [
+    { id: 'admin', name: 'Admin' },
+    { id: 'general', name: 'Allgemein' },
+    { id: 'archive', name: 'archived-Altes Fach' },
+    { id: 'new', name: 'Datenbanken' },
+  ];
+
+  assert.deepEqual(
+    orderCreatedCategories(categories, ['new']).map(({ id }) => id),
+    ['admin', 'general', 'new', 'archive'],
   );
 });
